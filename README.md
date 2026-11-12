@@ -7,7 +7,7 @@ An original six-player strategy game about graffiti, espionage and fragile allia
 Only the host computer needs Node.js or this folder. The other five laptops only need a modern browser.
 
 1. Install **Node.js LTS** from <https://nodejs.org> before game night (Node 22 or 24 recommended; minimum Node 20). Use the standard Windows installer and its default options. Reopen your terminal after installation.
-2. Download this repository using **Code → Download ZIP** on GitHub. Extract it to a normal folder, for example `C:\Games\ColdStatic`. Do not run it from inside the ZIP.
+2. Extract the supplied **ColdStatic.zip** to a normal folder, for example `C:\Games\ColdStatic`. If using GitHub, **Code → Download ZIP** also works once the game files are uploaded there. Do not run the game from inside the ZIP.
 3. Open that folder and double-click **install.cmd**. This downloads the locked server dependencies once. Wait for “Installation complete.” Internet is required only for this step and downloading Node/the game.
 
 Alternatively, open PowerShell in the extracted game folder and run:
