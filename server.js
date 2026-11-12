@@ -7,10 +7,14 @@ const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const engine = require("./engine");
+const bots = require("./bots");
 
 function createGameServer({
   dataDir = path.join(__dirname, "data"),
   port = 3000,
+  botDelayMs = 700,
+  offerGraceMs = 15000,
+  takeoverDelayMs = 60000,
 } = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const file = path.join(dataDir, "match.json");
@@ -25,6 +29,12 @@ function createGameServer({
     state = engine.initial();
     state.hostCode = crypto.randomBytes(6).toString("hex").toUpperCase();
   }
+  state.tutorialEnabled = !!state.tutorialEnabled;
+  let botTimer = null,
+    botTimerDue = 0,
+    closing = false;
+  let graceTurn = "",
+    graceUntil = 0;
   function save(next) {
     const tmp = file + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
@@ -62,11 +72,12 @@ function createGameServer({
   });
   const offline = new Map(state.players.map((p) => [p.id, Date.now()]));
   const online = () => [
-    ...new Set(
-      [...io.sockets.sockets.values()]
+    ...new Set([
+      ...state.players.filter((p) => p.bot).map((p) => p.id),
+      ...[...io.sockets.sockets.values()]
         .map((s) => s.data.playerId)
         .filter(Boolean),
-    ),
+    ]),
   ];
   function addresses() {
     const p = server.address()?.port || port;
@@ -85,8 +96,18 @@ function createGameServer({
           id: p.id,
           name: p.name,
           faction: p.faction,
+          bot: !!p.bot,
+          botTakeover: !!p.botTakeover,
           online: online().includes(p.id),
         })),
+        tutorialEnabled: !!state.tutorialEnabled,
+        tutorial: {
+          enabled: !!state.tutorialEnabled,
+          active:
+            !!state.tutorialEnabled &&
+            state.status === "playing" &&
+            state.round === 1,
+        },
         me: null,
       });
       return;
@@ -98,8 +119,138 @@ function createGameServer({
     v.offlineSince = Object.fromEntries(offline);
     socket.emit("state", v);
   }
+  function scheduleBots() {
+    if (
+      closing ||
+      botTimer ||
+      state.status !== "playing" ||
+      ![...io.sockets.sockets.values()].some(
+        (s) =>
+          s.data.playerId &&
+          state.players.some((p) => p.id === s.data.playerId && !p.bot),
+      )
+    )
+      return;
+    const candidates = state.players.filter((p) => p.bot);
+    const choice = candidates
+      .map((p) => ({
+        p,
+        action: bots.decide(engine.view(state, p.id, online())),
+      }))
+      .find((x) => x.action);
+    if (!choice) return;
+    const turnKey = `${state.round}:${state.turn}:${state.players[state.turn]?.actions}`;
+    if (graceTurn !== turnKey) {
+      graceTurn = turnKey;
+      graceUntil = 0;
+    }
+    const operation = ![
+      "commit",
+      "signal",
+      "accept",
+      "cancel",
+      "offer",
+      "break",
+    ].includes(choice.action.type);
+    const hasHumanOffer = state.offers.some((o) =>
+      state.players.some((p) => p.id === o.to && !p.bot),
+    );
+    if (operation && hasHumanOffer && !graceUntil)
+      graceUntil = Date.now() + offerGraceMs;
+    const wait =
+      operation && hasHumanOffer
+        ? Math.max(botDelayMs, graceUntil - Date.now())
+        : botDelayMs;
+    botTimerDue = Date.now() + wait;
+    botTimer = setTimeout(() => {
+      botTimer = null;
+      if (
+        closing ||
+        ![...io.sockets.sockets.values()].some(
+          (s) =>
+            s.data.playerId &&
+            state.players.some((p) => p.id === s.data.playerId && !p.bot),
+        )
+      )
+        return;
+      try {
+        if (!state.players.some((p) => p.id === choice.p.id && p.bot)) {
+          scheduleBots();
+          return;
+        }
+        const view = engine.view(state, choice.p.id, online());
+        const action = bots.decide(view);
+        if (!action) {
+          scheduleBots();
+          return;
+        }
+        const nowOperation = ![
+          "commit",
+          "signal",
+          "accept",
+          "cancel",
+          "offer",
+          "break",
+        ].includes(action.type);
+        if (
+          nowOperation &&
+          state.offers.some((o) =>
+            state.players.some((p) => p.id === o.to && !p.bot),
+          )
+        ) {
+          const currentTurn = `${state.round}:${state.turn}:${state.players[state.turn]?.actions}`;
+          if (graceTurn !== currentTurn) {
+            graceTurn = currentTurn;
+            graceUntil = 0;
+          }
+          if (!graceUntil) graceUntil = Date.now() + offerGraceMs;
+          if (Date.now() < graceUntil) {
+            scheduleBots();
+            return;
+          }
+        }
+        save(engine.apply(state, choice.p.id, action));
+      } catch (e) {
+        // A legal pass guarantees progress if an edge case invalidates a plan.
+        try {
+          if (!state.battle && state.players[state.turn]?.id === choice.p.id)
+            save(engine.apply(state, choice.p.id, { type: "pass" }));
+          else if (
+            state.battle &&
+            [state.battle.attacker, state.battle.defender].includes(
+              choice.p.id,
+            ) &&
+            !state.battle.commitments[choice.p.id]
+          )
+            save(
+              engine.apply(state, choice.p.id, {
+                type: "commit",
+                battleId: state.battle.id,
+                supply: 0,
+                cardId: null,
+              }),
+            );
+          else return;
+        } catch {
+          return;
+        }
+      }
+      broadcast();
+    }, wait);
+  }
   function broadcast() {
+    if (
+      botTimer &&
+      botTimerDue > Date.now() + botDelayMs &&
+      !state.offers.some((o) =>
+        state.players.some((p) => p.id === o.to && !p.bot),
+      )
+    ) {
+      clearTimeout(botTimer);
+      botTimer = null;
+    }
     for (const socket of io.sockets.sockets.values()) send(socket);
+    scheduleBots();
   }
   const check = (v, m) => {
     if (!v) throw new Error(m);
@@ -124,7 +275,7 @@ function createGameServer({
         if (a.token) {
           p = state.players.find((p) => p.token === a.token);
           check(
-            p,
+            p && (!p.bot || p.botTakeover),
             "Reconnect token not recognized. Use a current seat token or join the lobby.",
           );
         } else {
@@ -156,6 +307,15 @@ function createGameServer({
           next.players.push(p);
           next.version++;
           save(next);
+        }
+        if (p.botTakeover) {
+          const next = structuredClone(state);
+          const restored = next.players.find((x) => x.id === p.id);
+          restored.bot = false;
+          restored.botTakeover = false;
+          next.version++;
+          save(next);
+          p = restored;
         }
         socket.data.playerId = p.id;
         offline.delete(p.id);
@@ -202,6 +362,10 @@ function createGameServer({
             "reset",
             "remove",
             "skip",
+            "addBot",
+            "fillBots",
+            "tutorial",
+            "takeover",
           ].includes(action.type)
         ) {
           next = structuredClone(state);
@@ -234,6 +398,64 @@ function createGameServer({
             p.faction = action.faction;
           } else {
             check(state.hostId === id, "Only the host can do this.");
+            if (action.type === "addBot" || action.type === "fillBots") {
+              check(
+                state.status === "lobby",
+                "Bots can only be added in the lobby.",
+              );
+              check(next.players.length < 6, "All six seats are occupied.");
+              const count =
+                action.type === "fillBots" ? 6 - next.players.length : 1;
+              for (let i = 0; i < count; i++) {
+                const faction = [0, 1, 2, 3, 4, 5].find(
+                  (f) => !next.players.some((p) => p.faction === f),
+                );
+                let n = faction + 1,
+                  name = `Bot ${n}`;
+                while (
+                  next.players.some(
+                    (p) => p.name.toLowerCase() === name.toLowerCase(),
+                  )
+                )
+                  name = `Bot ${++n}`;
+                next.players.push({
+                  id: crypto.randomUUID(),
+                  name,
+                  faction,
+                  bot: true,
+                });
+              }
+            }
+            if (action.type === "tutorial") {
+              check(
+                state.status === "lobby",
+                "Tutorial setting locks when play begins.",
+              );
+              check(
+                typeof action.enabled === "boolean",
+                "Choose whether to enable the tutorial.",
+              );
+              next.tutorialEnabled = action.enabled;
+            }
+            if (action.type === "takeover") {
+              check(
+                state.status === "playing",
+                "Takeover is available during a match.",
+              );
+              const target = next.players.find((p) => p.id === action.target);
+              check(
+                target && !target.bot && target.id !== id,
+                "Choose a disconnected human crew.",
+              );
+              check(
+                !online().includes(target.id) &&
+                  offline.has(target.id) &&
+                  Date.now() - offline.get(target.id) >= takeoverDelayMs,
+                "Crew must be disconnected for at least 60 seconds.",
+              );
+              target.bot = true;
+              target.botTakeover = true;
+            }
             if (action.type === "start") {
               check(
                 state.players.every((p) => online().includes(p.id)),
@@ -252,15 +474,20 @@ function createGameServer({
             if (action.type === "reset") {
               next = {
                 ...engine.initial(),
-                players: next.players.map(({ id, token, name, faction }) => ({
-                  id,
-                  token,
-                  name,
-                  faction,
-                })),
+                players: next.players.map(
+                  ({ id, token, name, faction, bot, botTakeover }) => ({
+                    id,
+                    token,
+                    name,
+                    faction,
+                    bot: !!bot,
+                    botTakeover: !!botTakeover,
+                  }),
+                ),
                 hostCode: next.hostCode,
                 hostId: id,
                 duration: next.duration,
+                tutorialEnabled: next.tutorialEnabled,
                 version: next.version,
                 receipts: next.receipts,
               };
@@ -273,7 +500,8 @@ function createGameServer({
                 "Seat not found.",
               );
               check(
-                !online().includes(action.target),
+                next.players.find((p) => p.id === action.target)?.bot ||
+                  !online().includes(action.target),
                 "Only disconnected seats can be removed.",
               );
               next.players = next.players.filter((p) => p.id !== action.target);
@@ -327,8 +555,13 @@ function createGameServer({
     addresses,
     hostCode: state.hostCode,
     getState: () => structuredClone(state),
-    close: () =>
-      new Promise((resolve) => io.close(() => server.close(() => resolve()))),
+    close: () => {
+      closing = true;
+      clearTimeout(botTimer);
+      return new Promise((resolve) =>
+        io.close(() => server.close(() => resolve())),
+      );
+    },
   };
 }
 if (require.main === module) {

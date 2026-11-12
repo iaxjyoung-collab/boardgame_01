@@ -6,7 +6,7 @@ At the end of a round, hold 3 Broadcast Sites alone, or 4 as a formal pair with 
 
 ## SETUP & ROUND
 
-Six crews; 8 rounds; choose a 180–240 minute timer in the lobby. Each starts at its protected hideout with 4 operatives, 6 Supply, 3 Intel, and 2 private cards. Each round grants 3 Supply plus 1 per two non-hideout districts, and 2 Intel; murals grant 1 extra Supply each. Resources cap at 30. Reveal one city event. Take 3 actions each, one at a time clockwise, rotating the starting crew each round. No action clock; disconnected seats can reconnect. Host may pass a disconnected active seat after 60 seconds. The timer never interrupts a round or a battle.
+Six crews, controlled by 1–6 humans plus standard offline bots; 8 rounds; choose a 180–240 minute timer in the lobby. Each starts at its protected hideout with 4 operatives, 6 Supply, 3 Intel, and 2 private cards. Each round grants 3 Supply plus 1 per two non-hideout districts, and 2 Intel; murals grant 1 extra Supply each. Resources cap at 30. Reveal one city event. Take 3 actions each, one at a time clockwise, rotating the starting crew each round. No action clock; disconnected seats can reconnect. Host may pass a disconnected active seat or assign it a temporary bot after 60 seconds. A returning human restores control with their original token; an existing combat lock remains final. Bots pause when no human is connected. The timer never interrupts a round or a battle. Optional first-round guidance is enabled in the lobby; each human may skip or resume it, and it ends at round two without changing any rules.
 
 ## ACTIONS (one action each)
 
@@ -26,11 +26,11 @@ Both fighters privately lock 0–3 Supply and optionally one card. Neither choic
 
 ## DIPLOMACY
 
-Offer a pact or a trade at any time between operations; accepting transfers the specified Supply/Intel atomically. Offers expire when any operation is taken. Pacts need both players’ consent; maximum two per alliance. Break a pact free of actions for 2 Intel, even just before your attack. Your former partner gains 2 Supply and both of you cannot share a victory that round, including by fallback score. Solo victory remains possible. Promises are unenforceable. You cannot attack, tag, spread into, or scan your ally.
+Offer a pact or a trade at any time between operations; accepting transfers the specified Supply/Intel atomically. Offers expire when any operation is taken. Bots allow a bounded 15-second response window before taking an operation that would expire a human-directed offer. Pacts need both players’ consent; maximum two per alliance. Break a pact free of actions for 2 Intel, even just before your attack. Your former partner gains 2 Supply and both of you cannot share a victory that round, including by fallback score. Solo victory remains possible. Promises are unenforceable. You cannot attack, tag, spread into, or scan your ally.
 
 ## SURVEILLANCE & SECRECY
 
-Operatives and territory are public. Only owners receive their cards and scan reports. Your towers passively expose the current hand count of opponents with operatives within range; use Scan to inspect a random card. The log never discloses unrevealed commitments or private draws. Hideouts cannot be captured; recruit there to recover. No elimination.
+Operatives and territory are public. Only owners receive their cards and scan reports. Bots decide from the same filtered view as their crew and cannot read opponent secrets. Your towers passively expose the current hand count of opponents with operatives within range; use Scan to inspect a random card. The log never discloses unrevealed commitments or private draws. Hideouts cannot be captured; recruit there to recover. No elimination.
 
 ## WINNING & TIME LIMIT
 

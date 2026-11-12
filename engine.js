@@ -30,6 +30,7 @@ function initial() {
     battle: null,
     offers: [],
     duration: 210,
+    tutorialEnabled: false,
     receipts: {},
   };
 }
@@ -228,7 +229,11 @@ function endRound(s, now) {
       .sort((a, b) => b.score - a.score);
     s.status = "finished";
     s.result = {
-      reason: ranked.length ? "Time-limit score" : "City deadlock",
+      reason: ranked.length
+        ? s.round === 8
+          ? "Eight-round score"
+          : "Time-limit score"
+        : "City deadlock",
       winners: ranked.filter((g) => g.score === ranked[0].score),
       standings: groups,
     };
@@ -714,6 +719,11 @@ function view(s, id, connected = []) {
     turn: s.turn,
     starter: s.starter,
     duration: s.duration,
+    tutorialEnabled: !!s.tutorialEnabled,
+    tutorial: {
+      enabled: !!s.tutorialEnabled,
+      active: !!s.tutorialEnabled && s.status === "playing" && s.round === 1,
+    },
     endsAt: s.endsAt,
     event: s.event,
     nodes: clone(s.nodes),
@@ -724,6 +734,8 @@ function view(s, id, connected = []) {
       id: p.id,
       name: p.name,
       faction: p.faction,
+      bot: !!p.bot,
+      botTakeover: !!p.botTakeover,
       online: connected.includes(p.id),
       actions: p.actions,
       supply: p.supply,
