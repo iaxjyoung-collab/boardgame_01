@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0d171c" />
+    <title>Cold Static — Hold the Signal</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="shared.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <dialog id="rules">
+      <div class="dialog-head">
+        <h2>Field manual</h2>
+        <button data-close="rules">Close ×</button>
+      </div>
+      <div id="rules-content"></div>
+    </dialog>
+    <dialog id="diplomacy">
+      <div class="dialog-head">
+        <h2>Back channels</h2>
+        <button data-close="diplomacy">Close ×</button>
+      </div>
+      <div id="dip-content"></div>
+    </dialog>
+    <dialog id="seat">
+      <div class="dialog-head">
+        <h2>Private reconnect token</h2>
+        <button data-close="seat">Close ×</button>
+      </div>
+      <p>
+        Keep this private. It restores your crew on another browser. Anyone with
+        it can play as you.
+      </p>
+      <textarea
+        id="seat-token"
+        readonly
+        aria-label="Private reconnect token"
+      ></textarea>
+      <p>Paste it into “Restore a seat” on the joining screen.</p>
+    </dialog>
+    <noscript
+      >Cold Static requires JavaScript enabled to join the local game
+      server.</noscript
+    >
+  </body>
+</html>
